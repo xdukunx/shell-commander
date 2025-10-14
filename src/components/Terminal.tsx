@@ -4,10 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { executeSSHCommand } from "@/lib/ssh";
 
 interface TerminalProps {
   currentPath: string;
   onPathChange: (path: string) => void;
+  connection?: {
+    host: string;
+    port: number;
+    username: string;
+    password?: string;
+    privateKey?: string;
+    passphrase?: string;
+  };
 }
 
 interface TerminalLine {
@@ -15,7 +24,7 @@ interface TerminalLine {
   content: string;
 }
 
-export function Terminal({ currentPath, onPathChange }: TerminalProps) {
+export function Terminal({ currentPath, onPathChange, connection }: TerminalProps) {
   const [input, setInput] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -61,62 +70,55 @@ export function Terminal({ currentPath, onPathChange }: TerminalProps) {
     }
   }, [input]);
 
-  const handleCommand = (cmd: string) => {
+  const handleCommand = async (cmd: string) => {
     const trimmedCmd = cmd.trim();
     if (!trimmedCmd) return;
 
-    // Add to history
     setHistory([...history, trimmedCmd]);
     setHistoryIndex(-1);
-
-    // Add command to output
     setLines(prev => [...prev, { type: "command", content: `$ ${trimmedCmd}` }]);
 
-    // Process command
-    const parts = trimmedCmd.split(" ");
-    const command = parts[0];
+    if (!connection) {
+      setLines(prev => [...prev, { type: "error", content: "Not connected to SSH server" }]);
+      setInput("");
+      return;
+    }
 
-    switch (command) {
-      case "ls":
-        setLines(prev => [...prev, 
-          { type: "output", content: "documents/  projects/  downloads/  config.yaml  README.md  package.json" }
-        ]);
-        break;
+    // Handle cd locally for path tracking
+    const parts = trimmedCmd.split(" ");
+    if (parts[0] === "cd") {
+      if (parts[1]) {
+        const newPath = parts[1] === ".." 
+          ? currentPath.split("/").slice(0, -1).join("/") || "/"
+          : parts[1].startsWith("/") ? parts[1] : `${currentPath}/${parts[1]}`;
+        onPathChange(newPath);
+        setLines(prev => [...prev, { type: "output", content: `Changed directory to ${newPath}` }]);
+      } else {
+        setLines(prev => [...prev, { type: "error", content: "cd: missing directory argument" }]);
+      }
+      setInput("");
+      setSuggestions([]);
+      return;
+    }
+
+    if (trimmedCmd === "clear") {
+      setLines([]);
+      setInput("");
+      return;
+    }
+
+    try {
+      const fullCommand = `cd ${currentPath} && ${trimmedCmd}`;
+      const result = await executeSSHCommand(connection, fullCommand);
       
-      case "pwd":
-        setLines(prev => [...prev, { type: "output", content: currentPath }]);
-        break;
-      
-      case "cd":
-        if (parts[1]) {
-          const newPath = parts[1] === ".." 
-            ? currentPath.split("/").slice(0, -1).join("/") || "/"
-            : parts[1].startsWith("/") ? parts[1] : `${currentPath}/${parts[1]}`;
-          onPathChange(newPath);
-          setLines(prev => [...prev, { type: "output", content: `Changed directory to ${newPath}` }]);
-        } else {
-          setLines(prev => [...prev, { type: "error", content: "cd: missing directory argument" }]);
-        }
-        break;
-      
-      case "help":
-        setLines(prev => [...prev,
-          { type: "output", content: "Available commands:" },
-          { type: "output", content: "  ls        - List directory contents" },
-          { type: "output", content: "  cd <dir>  - Change directory" },
-          { type: "output", content: "  pwd       - Print working directory" },
-          { type: "output", content: "  mkdir     - Create directory" },
-          { type: "output", content: "  rm        - Remove file/directory" },
-          { type: "output", content: "  clear     - Clear terminal" },
-        ]);
-        break;
-      
-      case "clear":
-        setLines([]);
-        break;
-      
-      default:
-        setLines(prev => [...prev, { type: "error", content: `Command not found: ${command}. Type 'help' for available commands.` }]);
+      if (result.stdout) {
+        setLines(prev => [...prev, { type: "output", content: result.stdout.trim() }]);
+      }
+      if (result.stderr) {
+        setLines(prev => [...prev, { type: "error", content: result.stderr.trim() }]);
+      }
+    } catch (error) {
+      setLines(prev => [...prev, { type: "error", content: `Error: ${error.message}` }]);
     }
 
     setInput("");

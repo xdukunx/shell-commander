@@ -10,10 +10,37 @@ import { Server, Key, Shield } from "lucide-react";
 interface ConnectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onConnect: (connection: any) => void;
 }
 
-export function ConnectionDialog({ open, onOpenChange }: ConnectionDialogProps) {
-  const [authType, setAuthType] = useState<"password" | "key">("key");
+export function ConnectionDialog({ open, onOpenChange, onConnect }: ConnectionDialogProps) {
+  const [authType, setAuthType] = useState<"password" | "key">("password");
+  const [formData, setFormData] = useState({
+    name: "",
+    host: "",
+    port: "22",
+    username: "",
+    password: "",
+    privateKey: "",
+    passphrase: "",
+  });
+
+  const handleSave = () => {
+    if (!formData.name || !formData.host || !formData.username) {
+      return;
+    }
+
+    onConnect({
+      name: formData.name,
+      host: formData.host,
+      port: parseInt(formData.port) || 22,
+      username: formData.username,
+      password: authType === "password" ? formData.password : undefined,
+      privateKey: authType === "key" ? formData.privateKey : undefined,
+      passphrase: authType === "key" ? formData.passphrase : undefined,
+    });
+    onOpenChange(false);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -36,7 +63,12 @@ export function ConnectionDialog({ open, onOpenChange }: ConnectionDialogProps) 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Connection Name</Label>
-                <Input id="name" placeholder="Production Server" />
+                <Input 
+                  id="name" 
+                  placeholder="Production Server" 
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="group">Group</Label>
@@ -47,17 +79,34 @@ export function ConnectionDialog({ open, onOpenChange }: ConnectionDialogProps) 
             <div className="grid grid-cols-3 gap-4">
               <div className="col-span-2 space-y-2">
                 <Label htmlFor="host">Host</Label>
-                <Input id="host" placeholder="example.com" className="path-font" />
+                <Input 
+                  id="host" 
+                  placeholder="example.com" 
+                  className="path-font"
+                  value={formData.host}
+                  onChange={(e) => setFormData({...formData, host: e.target.value})}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="port">Port</Label>
-                <Input id="port" type="number" defaultValue="22" />
+                <Input 
+                  id="port" 
+                  type="number" 
+                  value={formData.port}
+                  onChange={(e) => setFormData({...formData, port: e.target.value})}
+                />
               </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
-              <Input id="username" placeholder="root" className="path-font" />
+              <Input 
+                id="username" 
+                placeholder="root" 
+                className="path-font"
+                value={formData.username}
+                onChange={(e) => setFormData({...formData, username: e.target.value})}
+              />
             </div>
 
             <div className="space-y-2">
@@ -83,27 +132,40 @@ export function ConnectionDialog({ open, onOpenChange }: ConnectionDialogProps) 
             {authType === "key" ? (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="keyfile">Private Key File</Label>
-                  <div className="flex gap-2">
-                    <Input id="keyfile" placeholder="~/.ssh/id_rsa" className="path-font flex-1" />
-                    <Button variant="outline">Browse</Button>
-                  </div>
+                  <Label htmlFor="keyfile">Private Key Content</Label>
+                  <Input 
+                    id="keyfile" 
+                    placeholder="Paste your private key here" 
+                    className="path-font"
+                    value={formData.privateKey}
+                    onChange={(e) => setFormData({...formData, privateKey: e.target.value})}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="passphrase">Passphrase (if required)</Label>
-                  <Input id="passphrase" type="password" />
+                  <Input 
+                    id="passphrase" 
+                    type="password"
+                    value={formData.passphrase}
+                    onChange={(e) => setFormData({...formData, passphrase: e.target.value})}
+                  />
                 </div>
                 <div className="flex items-center gap-2 p-3 bg-primary/10 rounded-lg">
                   <Key className="w-4 h-4 text-primary" />
                   <p className="text-sm text-muted-foreground">
-                    Your private key will be stored securely in the system keychain
+                    Your private key will be stored securely
                   </p>
                 </div>
               </>
             ) : (
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" />
+                <Input 
+                  id="password" 
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                />
               </div>
             )}
           </TabsContent>
@@ -163,7 +225,7 @@ export function ConnectionDialog({ open, onOpenChange }: ConnectionDialogProps) 
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={() => onOpenChange(false)}>Save Connection</Button>
+          <Button onClick={handleSave}>Connect</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

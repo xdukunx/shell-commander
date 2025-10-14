@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { File, Folder, ChevronRight, MoreVertical, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { listSSHFiles, SSHFile } from "@/lib/ssh";
 
 interface FileItem {
   name: string;
@@ -15,23 +16,71 @@ interface FilePaneProps {
   type: "local" | "remote";
   path: string;
   onPathChange: (path: string) => void;
+  connection?: {
+    host: string;
+    port: number;
+    username: string;
+    password?: string;
+    privateKey?: string;
+    passphrase?: string;
+  };
 }
 
-export function FilePane({ type, path, onPathChange }: FilePaneProps) {
+export function FilePane({ type, path, onPathChange, connection }: FilePaneProps) {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // Demo files
-  const files: FileItem[] = [
-    { name: "..", type: "directory", modified: "", permissions: "drwxr-xr-x" },
-    { name: "documents", type: "directory", modified: "2025-01-15 10:30", permissions: "drwxr-xr-x" },
-    { name: "projects", type: "directory", modified: "2025-01-14 15:45", permissions: "drwxr-xr-x" },
-    { name: "downloads", type: "directory", modified: "2025-01-13 09:20", permissions: "drwxr-xr-x" },
-    { name: "config.yaml", type: "file", size: "2.4 KB", modified: "2025-01-15 14:22", permissions: "-rw-r--r--" },
-    { name: "README.md", type: "file", size: "5.1 KB", modified: "2025-01-14 11:10", permissions: "-rw-r--r--" },
-    { name: "package.json", type: "file", size: "1.2 KB", modified: "2025-01-13 16:30", permissions: "-rw-r--r--" },
-    { name: "app.log", type: "file", size: "45.8 KB", modified: "2025-01-15 18:05", permissions: "-rw-r--r--" },
-    { name: ".env", type: "file", size: "0.5 KB", modified: "2025-01-10 08:15", permissions: "-rw-------" },
-  ];
+  useEffect(() => {
+    if (type === "remote" && connection) {
+      loadRemoteFiles();
+    } else {
+      // Local demo data
+      setFiles([
+        { name: "..", type: "directory", modified: "", permissions: "drwxr-xr-x" },
+        { name: "documents", type: "directory", modified: "2025-01-15 10:30", permissions: "drwxr-xr-x" },
+        { name: "projects", type: "directory", modified: "2025-01-14 15:45", permissions: "drwxr-xr-x" },
+        { name: "downloads", type: "directory", modified: "2025-01-13 09:20", permissions: "drwxr-xr-x" },
+        { name: "config.yaml", type: "file", size: "2.4 KB", modified: "2025-01-15 14:22", permissions: "-rw-r--r--" },
+        { name: "README.md", type: "file", size: "5.1 KB", modified: "2025-01-14 11:10", permissions: "-rw-r--r--" },
+        { name: "package.json", type: "file", size: "1.2 KB", modified: "2025-01-13 16:30", permissions: "-rw-r--r--" },
+        { name: "app.log", type: "file", size: "45.8 KB", modified: "2025-01-15 18:05", permissions: "-rw-r--r--" },
+        { name: ".env", type: "file", size: "0.5 KB", modified: "2025-01-10 08:15", permissions: "-rw-------" },
+      ]);
+    }
+  }, [type, path, connection]);
+
+  const loadRemoteFiles = async () => {
+    if (!connection) return;
+    
+    setLoading(true);
+    try {
+      const remoteFiles = await listSSHFiles(connection, path);
+      const formatted: FileItem[] = [
+        { name: "..", type: "directory", modified: "" },
+        ...remoteFiles.map((f: SSHFile) => ({
+          name: f.name,
+          type: f.isDirectory ? "directory" as const : "file" as const,
+          size: f.isDirectory ? undefined : formatBytes(f.size),
+          modified: new Date(f.modified).toLocaleString(),
+          permissions: f.permissions,
+        })),
+      ];
+      setFiles(formatted);
+    } catch (error) {
+      console.error('Failed to load remote files:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+  };
 
   const toggleSelect = (filename: string) => {
     const newSelected = new Set(selectedFiles);

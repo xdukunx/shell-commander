@@ -9,7 +9,11 @@ interface FileManagerProps {
   connection: {
     name: string;
     host: string;
+    port: number;
     username: string;
+    password?: string;
+    privateKey?: string;
+    passphrase?: string;
   };
   onDisconnect: () => void;
 }
@@ -92,7 +96,7 @@ export function FileManager({ connection, onDisconnect }: FileManagerProps) {
                     <RefreshCw className="w-3 h-3" />
                   </Button>
                 </div>
-                <FilePane type="local" path={localPath} onPathChange={setLocalPath} />
+                <FilePane type="local" path={localPath} onPathChange={setLocalPath} connection={connection} />
               </div>
 
               {/* Remote Pane */}
@@ -106,7 +110,7 @@ export function FileManager({ connection, onDisconnect }: FileManagerProps) {
                     <RefreshCw className="w-3 h-3" />
                   </Button>
                 </div>
-                <FilePane type="remote" path={remotePath} onPathChange={setRemotePath} />
+                <FilePane type="remote" path={remotePath} onPathChange={setRemotePath} connection={connection} />
               </div>
             </div>
           </ResizablePanel>
@@ -115,7 +119,7 @@ export function FileManager({ connection, onDisconnect }: FileManagerProps) {
 
           {/* Terminal */}
           <ResizablePanel defaultSize={40} minSize={20}>
-            <Terminal currentPath={remotePath} onPathChange={setRemotePath} />
+            <Terminal currentPath={remotePath} onPathChange={setRemotePath} connection={connection} />
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>

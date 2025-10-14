@@ -168,7 +168,7 @@ export function ConnectionManager({ onConnect }: ConnectionManagerProps) {
         )}
       </div>
 
-      <ConnectionDialog open={showDialog} onOpenChange={setShowDialog} />
+      <ConnectionDialog open={showDialog} onOpenChange={setShowDialog} onConnect={onConnect} />
     </div>
   );
 }

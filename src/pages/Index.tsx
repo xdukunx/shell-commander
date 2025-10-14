@@ -3,11 +3,13 @@ import { ConnectionManager } from "@/components/ConnectionManager";
 import { FileManager } from "@/components/FileManager";
 
 interface Connection {
-  id: string;
   name: string;
   host: string;
-  username: string;
   port: number;
+  username: string;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
 }
 
 const Index = () => {
