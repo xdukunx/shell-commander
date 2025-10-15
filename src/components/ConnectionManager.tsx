@@ -1,5 +1,8 @@
-import { useState } from "react";
-import { Server, Plus, Folder, Tag, Key, Search } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Server, Plus, Folder, Tag, Key, Search, LogOut } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -24,40 +27,51 @@ interface ConnectionManagerProps {
 export function ConnectionManager({ onConnect }: ConnectionManagerProps) {
   const [showDialog, setShowDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const { toast } = useToast();
+  const navigate = useNavigate();
 
-  // Demo connections
-  const connections: Connection[] = [
-    {
-      id: "1",
-      name: "Production Server",
-      host: "prod.example.com",
-      username: "admin",
-      port: 22,
-      group: "Production",
-      tags: ["web", "primary"],
-      color: "hsl(0 72% 51%)",
-    },
-    {
-      id: "2",
-      name: "Development Server",
-      host: "dev.example.com",
-      username: "developer",
-      port: 22,
-      group: "Development",
-      tags: ["test", "dev"],
-      color: "hsl(142 76% 36%)",
-    },
-    {
-      id: "3",
-      name: "Staging Environment",
-      host: "staging.example.com",
-      username: "deploy",
-      port: 22,
-      group: "Staging",
-      tags: ["web", "staging"],
-      color: "hsl(48 96% 53%)",
-    },
-  ];
+  useEffect(() => {
+    loadConnections();
+  }, []);
+
+  const loadConnections = async () => {
+    const { data, error } = await supabase
+      .from("ssh_connections")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load connections",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setConnections(
+      data.map((conn) => ({
+        id: conn.id,
+        name: conn.name,
+        host: conn.host,
+        username: conn.username,
+        port: conn.port,
+        group: conn.group_name,
+        tags: conn.tags || [],
+        color: conn.color || "hsl(217 91% 60%)",
+      }))
+    );
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
+
+  const handleConnectionSaved = () => {
+    loadConnections();
+  };
 
   const filteredConnections = connections.filter((conn) =>
     conn.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -80,10 +94,16 @@ export function ConnectionManager({ onConnect }: ConnectionManagerProps) {
                 <p className="text-sm text-muted-foreground">Connect to your servers</p>
               </div>
             </div>
-            <Button onClick={() => setShowDialog(true)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              New Connection
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => setShowDialog(true)} className="gap-2">
+                <Plus className="w-4 h-4" />
+                New Connection
+              </Button>
+              <Button onClick={handleSignOut} variant="outline" className="gap-2">
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </Button>
+            </div>
           </div>
 
           {/* Search */}
@@ -168,7 +188,12 @@ export function ConnectionManager({ onConnect }: ConnectionManagerProps) {
         )}
       </div>
 
-      <ConnectionDialog open={showDialog} onOpenChange={setShowDialog} onConnect={onConnect} />
+      <ConnectionDialog
+        open={showDialog}
+        onOpenChange={setShowDialog}
+        onConnect={onConnect}
+        onSaved={handleConnectionSaved}
+      />
     </div>
   );
 }
