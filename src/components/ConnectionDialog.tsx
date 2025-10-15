@@ -6,18 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Server, Key, Shield } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
 
 interface ConnectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConnect: (connection: any) => void;
-  onSaved?: () => void;
 }
 
-export function ConnectionDialog({ open, onOpenChange, onConnect, onSaved }: ConnectionDialogProps) {
-  const { toast } = useToast();
+export function ConnectionDialog({ open, onOpenChange, onConnect }: ConnectionDialogProps) {
   const [authType, setAuthType] = useState<"password" | "key">("password");
   const [formData, setFormData] = useState({
     name: "",
@@ -29,70 +25,21 @@ export function ConnectionDialog({ open, onOpenChange, onConnect, onSaved }: Con
     passphrase: "",
   });
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!formData.name || !formData.host || !formData.username) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
       return;
     }
 
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({
-          title: "Error",
-          description: "You must be logged in to save connections",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("ssh_connections")
-        .insert({
-          user_id: user.id,
-          name: formData.name,
-          host: formData.host,
-          port: parseInt(formData.port) || 22,
-          username: formData.username,
-          auth_type: authType,
-          password: authType === "password" ? formData.password : null,
-          private_key: authType === "key" ? formData.privateKey : null,
-          passphrase: authType === "key" && formData.passphrase ? formData.passphrase : null,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "Connection saved successfully",
-      });
-
-      onConnect({
-        id: data.id,
-        name: data.name,
-        host: data.host,
-        port: data.port,
-        username: data.username,
-        password: data.password,
-        privateKey: data.private_key,
-        passphrase: data.passphrase,
-      });
-
-      onSaved?.();
-      onOpenChange(false);
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
+    onConnect({
+      name: formData.name,
+      host: formData.host,
+      port: parseInt(formData.port) || 22,
+      username: formData.username,
+      password: authType === "password" ? formData.password : undefined,
+      privateKey: authType === "key" ? formData.privateKey : undefined,
+      passphrase: authType === "key" ? formData.passphrase : undefined,
+    });
+    onOpenChange(false);
   };
 
   return (

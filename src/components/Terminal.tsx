@@ -1,14 +1,15 @@
-import { useRef, useEffect } from "react";
-import { Terminal as TerminalIcon } from "lucide-react";
-import { Terminal as XTerm } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import "@xterm/xterm/css/xterm.css";
+import { useState, useRef, useEffect } from "react";
+import { Terminal as TerminalIcon, Send, X, Plus, Minimize2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { executeSSHCommand } from "@/lib/ssh";
 
 interface TerminalProps {
   currentPath: string;
-  onPathChange?: (path: string) => void;
-  connection: {
+  onPathChange: (path: string) => void;
+  connection?: {
     host: string;
     port: number;
     username: string;
@@ -18,123 +19,141 @@ interface TerminalProps {
   };
 }
 
+interface TerminalLine {
+  type: "command" | "output" | "error";
+  content: string;
+}
+
 export function Terminal({ currentPath, onPathChange, connection }: TerminalProps) {
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<XTerm | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const currentLineRef = useRef<string>("");
+  const [input, setInput] = useState("");
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [lines, setLines] = useState<TerminalLine[]>([
+    { type: "output", content: "SSH Terminal - Connected to server" },
+    { type: "output", content: "Type 'help' for available commands" },
+  ]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const outputRef = useRef<HTMLDivElement>(null);
+
+  // Available commands for autocomplete
+  const commands = ["ls", "cd", "pwd", "mkdir", "rm", "cp", "mv", "cat", "nano", "vim", "grep", "find", "chmod", "chown", "help"];
+  
+  // Directory suggestions (simulated)
+  const directories = ["documents", "projects", "downloads", "config", "logs"];
 
   useEffect(() => {
-    if (!terminalRef.current) return;
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    }
+  }, [lines]);
 
-    const term = new XTerm({
-      cursorBlink: true,
-      fontSize: 14,
-      fontFamily: '"Cascadia Code", Menlo, Monaco, "Courier New", monospace',
-      theme: {
-        background: "#0a0a0a",
-        foreground: "#e0e0e0",
-        cursor: "#3b82f6",
-        selectionBackground: "#3b82f620",
-        black: "#000000",
-        brightBlack: "#808080",
-        red: "#ef4444",
-        brightRed: "#f87171",
-        green: "#10b981",
-        brightGreen: "#34d399",
-        yellow: "#f59e0b",
-        brightYellow: "#fbbf24",
-        blue: "#3b82f6",
-        brightBlue: "#60a5fa",
-        magenta: "#a855f7",
-        brightMagenta: "#c084fc",
-        cyan: "#06b6d4",
-        brightCyan: "#22d3ee",
-        white: "#e0e0e0",
-        brightWhite: "#ffffff",
-      },
-    });
-
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(terminalRef.current);
-    fitAddon.fit();
-
-    xtermRef.current = term;
-    fitAddonRef.current = fitAddon;
-
-    term.writeln("\x1b[1;34m╔══════════════════════════════════════╗\x1b[0m");
-    term.writeln("\x1b[1;34m║       SSH Terminal Ready             ║\x1b[0m");
-    term.writeln("\x1b[1;34m╚══════════════════════════════════════╝\x1b[0m");
-    term.writeln(`\x1b[1;32mConnected to:\x1b[0m ${connection.host}:${connection.port}`);
-    term.writeln("");
-    term.write(`\x1b[1;32m${connection.username}@${connection.host}\x1b[0m:\x1b[1;34m${currentPath}\x1b[0m$ `);
-
-    term.onData((data) => {
-      if (data === "\r") {
-        // Enter key
-        term.writeln("");
-        const command = currentLineRef.current.trim();
-        if (command) {
-          executeCommand(command);
-        } else {
-          term.write(`\x1b[1;32m${connection.username}@${connection.host}\x1b[0m:\x1b[1;34m${currentPath}\x1b[0m$ `);
-        }
-        currentLineRef.current = "";
-      } else if (data === "\x7f") {
-        // Backspace
-        if (currentLineRef.current.length > 0) {
-          currentLineRef.current = currentLineRef.current.slice(0, -1);
-          term.write("\b \b");
-        }
-      } else if (data >= String.fromCharCode(0x20) && data <= String.fromCharCode(0x7e)) {
-        // Printable characters
-        currentLineRef.current += data;
-        term.write(data);
+  useEffect(() => {
+    // Update suggestions based on input
+    if (input.trim()) {
+      const parts = input.split(" ");
+      const lastPart = parts[parts.length - 1];
+      
+      if (parts.length === 1) {
+        // Suggest commands
+        const matches = commands.filter(cmd => cmd.startsWith(lastPart));
+        setSuggestions(matches);
+      } else if (parts[0] === "cd" && parts.length === 2) {
+        // Suggest directories for cd command
+        const matches = directories.filter(dir => dir.startsWith(lastPart));
+        setSuggestions(matches);
+      } else {
+        setSuggestions([]);
       }
-    });
+    } else {
+      setSuggestions([]);
+    }
+  }, [input]);
 
-    const handleResize = () => fitAddon.fit();
-    window.addEventListener("resize", handleResize);
+  const handleCommand = async (cmd: string) => {
+    const trimmedCmd = cmd.trim();
+    if (!trimmedCmd) return;
 
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      term.dispose();
-    };
-  }, []);
+    setHistory([...history, trimmedCmd]);
+    setHistoryIndex(-1);
+    setLines(prev => [...prev, { type: "command", content: `$ ${trimmedCmd}` }]);
 
-  const executeCommand = async (command: string) => {
-    const term = xtermRef.current;
-    if (!term) return;
-
-    try {
-      const fullCommand = `cd ${currentPath} && ${command}`;
-      const result = await executeSSHCommand(connection, fullCommand);
-
-      if (result.stdout) {
-        term.writeln(result.stdout);
-      }
-      if (result.stderr) {
-        term.writeln(`\x1b[1;31m${result.stderr}\x1b[0m`);
-      }
-
-      // Update path if cd command
-      if (command.startsWith("cd ")) {
-        const newPath = command.substring(3).trim();
-        if (newPath) {
-          const absolutePath = newPath.startsWith("/")
-            ? newPath
-            : newPath === ".."
-            ? currentPath.split("/").slice(0, -1).join("/") || "/"
-            : `${currentPath}/${newPath}`.replace(/\/+/g, "/");
-          onPathChange?.(absolutePath);
-        }
-      }
-    } catch (error: any) {
-      term.writeln(`\x1b[1;31mError: ${error.message}\x1b[0m`);
+    if (!connection) {
+      setLines(prev => [...prev, { type: "error", content: "Not connected to SSH server" }]);
+      setInput("");
+      return;
     }
 
-    term.write(`\x1b[1;32m${connection.username}@${connection.host}\x1b[0m:\x1b[1;34m${currentPath}\x1b[0m$ `);
+    // Handle cd locally for path tracking
+    const parts = trimmedCmd.split(" ");
+    if (parts[0] === "cd") {
+      if (parts[1]) {
+        const newPath = parts[1] === ".." 
+          ? currentPath.split("/").slice(0, -1).join("/") || "/"
+          : parts[1].startsWith("/") ? parts[1] : `${currentPath}/${parts[1]}`;
+        onPathChange(newPath);
+        setLines(prev => [...prev, { type: "output", content: `Changed directory to ${newPath}` }]);
+      } else {
+        setLines(prev => [...prev, { type: "error", content: "cd: missing directory argument" }]);
+      }
+      setInput("");
+      setSuggestions([]);
+      return;
+    }
+
+    if (trimmedCmd === "clear") {
+      setLines([]);
+      setInput("");
+      return;
+    }
+
+    try {
+      const fullCommand = `cd ${currentPath} && ${trimmedCmd}`;
+      const result = await executeSSHCommand(connection, fullCommand);
+      
+      if (result.stdout) {
+        setLines(prev => [...prev, { type: "output", content: result.stdout.trim() }]);
+      }
+      if (result.stderr) {
+        setLines(prev => [...prev, { type: "error", content: result.stderr.trim() }]);
+      }
+    } catch (error) {
+      setLines(prev => [...prev, { type: "error", content: `Error: ${error.message}` }]);
+    }
+
+    setInput("");
+    setSuggestions([]);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleCommand(input);
+    } else if (e.key === "Tab" && suggestions.length > 0) {
+      e.preventDefault();
+      const parts = input.split(" ");
+      parts[parts.length - 1] = suggestions[0];
+      setInput(parts.join(" "));
+      setSuggestions([]);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (history.length > 0) {
+        const newIndex = historyIndex === -1 ? history.length - 1 : Math.max(0, historyIndex - 1);
+        setHistoryIndex(newIndex);
+        setInput(history[newIndex]);
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (historyIndex !== -1) {
+        const newIndex = historyIndex + 1;
+        if (newIndex >= history.length) {
+          setHistoryIndex(-1);
+          setInput("");
+        } else {
+          setHistoryIndex(newIndex);
+          setInput(history[newIndex]);
+        }
+      }
+    }
   };
 
   return (
@@ -144,14 +163,85 @@ export function Terminal({ currentPath, onPathChange, connection }: TerminalProp
         <div className="flex items-center gap-2">
           <TerminalIcon className="w-4 h-4 text-primary" />
           <span className="text-sm font-medium">SSH Terminal</span>
-          <span className="text-xs text-muted-foreground path-font">
-            {connection.username}@{connection.host}:{currentPath}
-          </span>
+          <Badge variant="outline" className="text-xs path-font">
+            {currentPath}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+            <Plus className="w-3 h-3" />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+            <Minimize2 className="w-3 h-3" />
+          </Button>
         </div>
       </div>
 
-      {/* xterm.js Terminal */}
-      <div ref={terminalRef} className="flex-1 p-2 overflow-hidden" />
+      {/* Terminal Output */}
+      <div ref={outputRef} className="flex-1 overflow-y-auto p-4 terminal-font text-sm">
+        {lines.map((line, i) => (
+          <div
+            key={i}
+            className={cn(
+              "mb-1",
+              line.type === "command" && "text-primary font-semibold",
+              line.type === "output" && "text-foreground",
+              line.type === "error" && "text-destructive"
+            )}
+          >
+            {line.content}
+          </div>
+        ))}
+      </div>
+
+      {/* Autocomplete Suggestions */}
+      {suggestions.length > 0 && (
+        <div className="border-t border-terminal-border bg-muted/50 px-4 py-2">
+          <div className="text-xs text-muted-foreground mb-1">Suggestions (press Tab):</div>
+          <div className="flex gap-2 flex-wrap">
+            {suggestions.map((suggestion) => (
+              <Badge
+                key={suggestion}
+                variant="secondary"
+                className="cursor-pointer hover:bg-primary/20 terminal-font text-xs"
+                onClick={() => {
+                  const parts = input.split(" ");
+                  parts[parts.length - 1] = suggestion;
+                  setInput(parts.join(" "));
+                  setSuggestions([]);
+                  inputRef.current?.focus();
+                }}
+              >
+                {suggestion}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Terminal Input */}
+      <div className="border-t border-terminal-border bg-card/20 p-4">
+        <div className="flex items-center gap-2">
+          <span className="text-primary terminal-font text-sm">$</span>
+          <Input
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type a command..."
+            className="flex-1 bg-transparent border-none focus-visible:ring-0 terminal-font text-sm"
+            autoFocus
+          />
+          <Button
+            size="sm"
+            onClick={() => handleCommand(input)}
+            className="gap-2"
+          >
+            <Send className="w-3 h-3" />
+            Run
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
