@@ -14,7 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      ssh_connections: {
+        Row: {
+          auth_type: string
+          color: string | null
+          created_at: string
+          group_name: string | null
+          host: string
+          id: string
+          initial_directory: string | null
+          name: string
+          passphrase: string | null
+          password: string | null
+          port: number
+          private_key: string | null
+          tags: string[] | null
+          updated_at: string
+          user_id: string
+          username: string
+        }
+        Insert: {
+          auth_type?: string
+          color?: string | null
+          created_at?: string
+          group_name?: string | null
+          host: string
+          id?: string
+          initial_directory?: string | null
+          name: string
+          passphrase?: string | null
+          password?: string | null
+          port?: number
+          private_key?: string | null
+          tags?: string[] | null
+          updated_at?: string
+          user_id: string
+          username: string
+        }
+        Update: {
+          auth_type?: string
+          color?: string | null
+          created_at?: string
+          group_name?: string | null
+          host?: string
+          id?: string
+          initial_directory?: string | null
+          name?: string
+          passphrase?: string | null
+          password?: string | null
+          port?: number
+          private_key?: string | null
+          tags?: string[] | null
+          updated_at?: string
+          user_id?: string
+          username?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
