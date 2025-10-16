@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
-import { Server, Plus, Folder, Tag, Key, Search, LogOut } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { Server, Plus, Folder, Tag, Key, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ConnectionDialog } from "./ConnectionDialog";
+
+const STORAGE_KEY = "ssh_connections";
 
 interface Connection {
   id: string;
@@ -15,6 +15,9 @@ interface Connection {
   host: string;
   username: string;
   port: number;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
   group?: string;
   tags?: string[];
   color?: string;
@@ -29,48 +32,34 @@ export function ConnectionManager({ onConnect }: ConnectionManagerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [connections, setConnections] = useState<Connection[]>([]);
   const { toast } = useToast();
-  const navigate = useNavigate();
 
   useEffect(() => {
     loadConnections();
   }, []);
 
-  const loadConnections = async () => {
-    const { data, error } = await supabase
-      .from("ssh_connections")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
+  const loadConnections = () => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        setConnections(JSON.parse(stored));
+      }
+    } catch (error) {
       toast({
         title: "Error",
         description: "Failed to load connections",
         variant: "destructive",
       });
-      return;
     }
-
-    setConnections(
-      data.map((conn) => ({
-        id: conn.id,
-        name: conn.name,
-        host: conn.host,
-        username: conn.username,
-        port: conn.port,
-        group: conn.group_name,
-        tags: conn.tags || [],
-        color: conn.color || "hsl(217 91% 60%)",
-      }))
-    );
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate("/auth");
-  };
-
-  const handleConnectionSaved = () => {
-    loadConnections();
+  const handleConnectionSaved = (connection: Connection) => {
+    const updatedConnections = [...connections, connection];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedConnections));
+    setConnections(updatedConnections);
+    toast({
+      title: "Success",
+      description: "Connection saved successfully",
+    });
   };
 
   const filteredConnections = connections.filter((conn) =>
@@ -94,16 +83,10 @@ export function ConnectionManager({ onConnect }: ConnectionManagerProps) {
                 <p className="text-sm text-muted-foreground">Connect to your servers</p>
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={() => setShowDialog(true)} className="gap-2">
-                <Plus className="w-4 h-4" />
-                New Connection
-              </Button>
-              <Button onClick={handleSignOut} variant="outline" className="gap-2">
-                <LogOut className="w-4 h-4" />
-                Sign Out
-              </Button>
-            </div>
+            <Button onClick={() => setShowDialog(true)} className="gap-2">
+              <Plus className="w-4 h-4" />
+              New Connection
+            </Button>
           </div>
 
           {/* Search */}
